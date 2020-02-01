@@ -1,3 +1,4 @@
+	.LF marzbios.lst
 ;---------------------------------------------------------------------------
 ;
 ;		MARZ80 BIOS
@@ -12,26 +13,34 @@ STACK_TOP	.EQ $FFFF	Stack pointer starting address
 PORT_A		.EQ $00		8255 PORT A address - 16 x 2 LCD display
 PORT_B		.EQ $01		8255 PORT B address - Arduino Nano PS/2 kybd controller
 PORT_C		.EQ $02		8255 PORT C address - control port for PORT A & PORT B
-PORT_CTL	.EQ	$03		8255 Control register address
+PORT_CTL	.EQ $03		8255 Control register address
+
+COLD_START
+	JP WARM_START
+
+	.NO $0008,$FF
+
+RST_08
+	DI
+	CALL SCAN_CODE
+	RETI
+
+	.NO $0040,$FF
+
+BIOS_MSG	.DB "MARZ80 BIOS V1.0", $0A
 
 WARM_START
-
 	LD SP, STACK_TOP	Initialize the stack pointer
 
 ;---------------------------------------------------------------------------
 ;		$86 Sets the 8255 GROUP A to MODE 0: PORT A & PORT C Upper to OUTPUTS
-;		GROUP B to MODE 1: PORT B INPUT, C Lower to STROBE
+;				GROUP B to MODE 1: PORT B INPUT, C Lower to STROBE
 ;---------------------------------------------------------------------------
 
 	LD A, $86
 	OUT (PORT_CTL), A	Send the control word to the 8255 Control Register
 
-;---------------------------------------------------------------------------
-;		$38 Sets the 16x2 Display to 8 bit Mode, 2 lines, & 5x8 font size
-;		The display is connected to PORT A of the 8255
-;---------------------------------------------------------------------------
-
-	LD A, $38					Setup the display as described above
+	LD A, $38					Set LCD to 8 bit Mode, 2 lines, & 5x8 font
 	CALL LCD_COMMAND
 	LD A, $0F					Init display instruction
 	CALL LCD_COMMAND
@@ -51,18 +60,8 @@ NEXT_CHAR
 	CALL LCD_COMMAND
 	LD A, $3E					Load cursor '>'
 	CALL LCD_DISPLAY
-
+	EI
 	HALT
-
-ECHO
-	IN A, (PORT_C)		Read PORT C to Accumulator
-	LD C, $02					Load bit mask into C
-	AND C							Apply bit mask
-	CP $02						Check IBF (bit 2 of PORT C)
-	JP NZ,ECHO 			Nothing in buffer, keep checking
-	IN A, (PORT_B)		Read PORT B to Accumulator
-	CALL LCD_DISPLAY
-	RET
 
 LCD_COMMAND
 	OUT (PORT_A), A
@@ -80,5 +79,7 @@ LCD_DISPLAY
 	OUT (PORT_C), A
 	RET
 
-BIOS_MSG
-	.DB "MARZ80 BIOS V1.0", $0A
+SCAN_CODE
+;	IN A, (PORT_B)		Read the current scan code from keyboard controller
+; 									Conditional handling of scan codes for control or echo
+	RET
